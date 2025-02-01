@@ -1,8 +1,5 @@
 package me.modmuss50.remotesign;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.http.impl.client.HttpClients;
-import org.codehaus.groovy.runtime.StringGroovyMethods;
 import org.gradle.api.Project;
 import org.gradle.api.provider.Property;
 import org.gradle.api.publish.Publication;
@@ -17,25 +14,50 @@ import java.io.File;
 public abstract class RemoteSignExtension {
 	private final Project project;
 
-	abstract Property<String> getRequestUrl();
-	abstract Property<String> getPgpAuthKey();
-	abstract Property<String> getJarAuthKey();
-
-	// Enable to test locally without actually signing.
-	abstract Property<Boolean> getUseDummyForTesting();
+	// Declare properties using Gradle's Property API
+	public final Property<String> requestUrl;
+	public final Property<String> pgpAuthKey;
+	public final Property<String> jarAuthKey;
+	public final Property<Boolean> useDummyForTesting;
 
 	private final File tempDir;
 
 	public RemoteSignExtension(Project project) {
 		this.project = project;
 
-		getRequestUrl().finalizeValueOnRead();
-		getPgpAuthKey().finalizeValueOnRead();
-		getJarAuthKey().finalizeValueOnRead();
+		// Initialize properties using Gradle's Property API
+		requestUrl = project.getObjects().property(String.class);
+		pgpAuthKey = project.getObjects().property(String.class);
+		jarAuthKey = project.getObjects().property(String.class);
+		useDummyForTesting = project.getObjects().property(Boolean.class);
 
-		getUseDummyForTesting().convention(false).finalizeValueOnRead();
+		// Finalizing values for Gradle (compatible with both Groovy and Kotlin DSLs)
+		requestUrl.finalizeValueOnRead();
+		pgpAuthKey.finalizeValueOnRead();
+		jarAuthKey.finalizeValueOnRead();
 
-		tempDir = new File(project.getBuildDir(), "remotesign");
+		// Set default for useDummyForTesting if not provided
+		useDummyForTesting.convention(false).finalizeValueOnRead();
+
+		// File initialization for temporary directory
+		tempDir = new File(project.getLayout().getBuildDirectory().getAsFile().get(), "remotesign");
+	}
+
+	// Provide public getter methods to access the properties
+	public Property<String> getRequestUrl() {
+		return requestUrl;
+	}
+
+	public Property<String> getPgpAuthKey() {
+		return pgpAuthKey;
+	}
+
+	public Property<String> getJarAuthKey() {
+		return jarAuthKey;
+	}
+
+	public Property<Boolean> getUseDummyForTesting() {
+		return useDummyForTesting;
 	}
 
 	public void sign(Publication... publications) {
@@ -46,7 +68,7 @@ public abstract class RemoteSignExtension {
 
 	public void sign(AbstractArchiveTask... tasks) {
 		for (AbstractArchiveTask task : tasks) {
-			String name = "sign" + StringUtils.capitalize(task.getName());
+			String name = "sign" + capitalize(task.getName());
 			project.getTasks().register(name, RemoteSignJarTask.class, remoteSignJarTask -> {
 				remoteSignJarTask.getInput().set(task.getArchiveFile());
 				remoteSignJarTask.getOutput().set(getOutputFile(name, task.getArchiveFile().get().getAsFile()));
@@ -58,7 +80,7 @@ public abstract class RemoteSignExtension {
 	}
 
 	public TaskProvider<RemoteSignJarTask> sign(File inputFile, File outputFile, String name) {
-		return project.getTasks().register("sign" + StringUtils.capitalize(name), RemoteSignJarTask.class, remoteSignJarTask -> {
+		return project.getTasks().register("sign" + capitalize(name), RemoteSignJarTask.class, remoteSignJarTask -> {
 			remoteSignJarTask.getInput().set(inputFile);
 			remoteSignJarTask.getOutput().set(outputFile);
 			remoteSignJarTask.getSignatureMethod().set(SignatureMethod.JARSIGN);
@@ -67,7 +89,7 @@ public abstract class RemoteSignExtension {
 	}
 
 	private <T extends PublicationArtifact> void signArtifact(PublicationInternal<T> publication) {
-		String taskNamePrefix = "sign" + StringGroovyMethods.capitalize(publication.getName());
+		String taskNamePrefix = "sign" + capitalize(publication.getName());
 
 		int i = 0;
 		for (T artifact : publication.getPublishableArtifacts()) {
@@ -123,5 +145,13 @@ public abstract class RemoteSignExtension {
 		public File create() {
 			return task.get().getOutput().get().getAsFile();
 		}
+	}
+
+	// Utility method to replace StringGroovyMethods.capitalize
+	private static String capitalize(String str) {
+		if (str == null || str.isEmpty()) {
+			return str;
+		}
+		return str.substring(0, 1).toUpperCase() + str.substring(1);
 	}
 }
